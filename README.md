@@ -24,4 +24,4 @@ Have fun.
 Erkan Şanlı.
 
 
-![This is an image](https://github.com/procamer/Century/blob/master/Screenshot.png)
+![This is an image](https://github.com/procamer/Century/blob/master/screenshot.png)
