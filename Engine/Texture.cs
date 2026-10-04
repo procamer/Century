@@ -24,28 +24,27 @@ namespace Engine
             
             try
             {
-                string ext = Path.GetExtension(path);
                 if (File.Exists(path))
                 {
-                    switch (ext)
+                    if (string.Equals(Path.GetExtension(path), ".tga", StringComparison.OrdinalIgnoreCase))
                     {
-                        case ".tga":
-                            TextureID = GenerateTextureID(path);
-                            return;
-                        default:
-                            TextureID = GenerateTextureID(new Bitmap(path));
-                            return;
+                        TextureID = GenerateTextureID(path);
                     }
+                    else
+                    {
+                        using (Bitmap bitmap = new Bitmap(path))
+                            TextureID = GenerateTextureID(bitmap);
+                    }
+                    return;
                 }
-                else
-                {
-                    TextureID = GenerateTextureID(5,5, Settings.Core.Default.MissingTextureColor);
-                }
+                Console.WriteLine($"Texture -> File not found: {path}");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Console.WriteLine($"Texture -> Could not load '{path}': {ex.Message}");
             }
 
+            TextureID = GenerateTextureID(5, 5, Settings.Core.Default.MissingTextureColor);
         }
 
         public Texture(EmbeddedTexture texture)
@@ -121,7 +120,7 @@ namespace Engine
                     }
                     else
                     {
-                        throw new Exception("Doku yükleme baþarýsýz oldu!");
+                        throw new Exception("Doku yï¿½kleme baï¿½arï¿½sï¿½z oldu!");
                     }
                 }
             }
@@ -154,7 +153,7 @@ namespace Engine
             else
             {
                 GL.ActiveTexture(0);
-                throw new Exception("Doku yükleme baþarýsýz oldu!");
+                throw new Exception("Doku yï¿½kleme baï¿½arï¿½sï¿½z oldu!");
             }
 
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.LinearMipmapLinear);
@@ -189,21 +188,33 @@ namespace Engine
 
         public static int GenerateTextureID(string TGAFile)
         {
-            string ext = Path.GetExtension(TGAFile);
-            if (ext == "tga")
+            using (Pfim.IImage image = Pfim.Pfimage.FromFile(TGAFile))
             {
-                Bitmap bitmap = Paloma.TargaImage.LoadTargaImage(TGAFile);
-                using (Graphics gfx = Graphics.FromImage(bitmap))
+                System.Drawing.Imaging.PixelFormat format;
+                switch (image.Format)
                 {
-                    gfx.DrawImage(bitmap, 0, 0, bitmap.Width, bitmap.Height);
+                    case Pfim.ImageFormat.Rgba32: format = System.Drawing.Imaging.PixelFormat.Format32bppArgb; break;
+                    case Pfim.ImageFormat.Rgb24: format = System.Drawing.Imaging.PixelFormat.Format24bppRgb; break;
+                    case Pfim.ImageFormat.R5g6b5: format = System.Drawing.Imaging.PixelFormat.Format16bppRgb565; break;
+                    case Pfim.ImageFormat.R5g5b5: format = System.Drawing.Imaging.PixelFormat.Format16bppRgb555; break;
+                    case Pfim.ImageFormat.R5g5b5a1: format = System.Drawing.Imaging.PixelFormat.Format16bppArgb1555; break;
+                    default:
+                        throw new NotSupportedException($"Unsupported TGA pixel format: {image.Format}");
                 }
-                return GenerateTextureID(bitmap);
-            }
-            else
-            {
-                return GenerateTextureID(5, 5, Settings.Core.Default.MissingTextureColor);
-            }
 
+                // Bitmap reads straight from the pinned pixel buffer, so keep it pinned until upload
+                GCHandle handle = GCHandle.Alloc(image.Data, GCHandleType.Pinned);
+                try
+                {
+                    IntPtr data = Marshal.UnsafeAddrOfPinnedArrayElement(image.Data, 0);
+                    using (Bitmap bitmap = new Bitmap(image.Width, image.Height, image.Stride, format, data))
+                        return GenerateTextureID(bitmap);
+                }
+                finally
+                {
+                    handle.Free();
+                }
+            }
         }
         
         public static int GenerateTextureID(int width, int height, Color color)

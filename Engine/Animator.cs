@@ -130,6 +130,42 @@ namespace Engine
             animationList.Add(animation);
         }
 
+        // Switches to a looping animation; keeps playing if it is already active
+        public void Play(string key)
+        {
+            int index = animationDict[key];
+            if (index == activeAnim && loop) return;
+            activeAnim = index;
+            loop = true;
+            Cursor = 0.0;
+        }
+
+        // Plays an animation once from startTime (seconds) and holds its last frame
+        public void PlayOnce(string key, double startTime = 0.0)
+        {
+            activeAnim = animationDict[key];
+            loop = false;
+            Cursor = startTime;
+        }
+
+        // Removes the root's upward travel and horizontal drift from a Y-up clip so physics can move
+        // the character instead. Dips below the rest height (crouches, landings) are kept.
+        public static void MakeInPlace(Animation animation, string rootNodeName)
+        {
+            foreach (NodeAnimationChannel channel in animation.NodeAnimationChannels)
+            {
+                if (channel.NodeName != rootNodeName || !channel.HasPositionKeys) continue;
+
+                Vector3D rest = channel.PositionKeys[0].Value;
+                for (int i = 0; i < channel.PositionKeyCount; i++)
+                {
+                    VectorKey key = channel.PositionKeys[i];
+                    key.Value = new Vector3D(rest.X, System.Math.Min(key.Value.Y, rest.Y), rest.Z);
+                    channel.PositionKeys[i] = key;
+                }
+            }
+        }
+
         public void Update(double delta)
         {
             Cursor += delta * AnimationPlaybackSpeed;
@@ -138,7 +174,11 @@ namespace Engine
         public void UpdateAnimation()
         {
             Animation target = animationList[ActiveAnimation];
-            double animationTime = Cursor * TicksPerSecond % target.DurationInTicks;
+            double animationTime = Cursor * TicksPerSecond;
+            // A finished one-shot clip must hold its last frame instead of wrapping to the first
+            animationTime = Loop
+                ? animationTime % target.DurationInTicks
+                : System.Math.Min(animationTime, target.DurationInTicks);
             ProcessNode(target, (float)animationTime, raw.RootNode, Matrix4.Identity);
         }
 
@@ -155,9 +195,10 @@ namespace Engine
                 Vector3 interpolatedPosition = CalcInterpolatedPosition(animationTime, boneAnimation);
                 Vector3 interpolatedScale = CalcInterpolatedScale(animationTime, boneAnimation);
 
-                nodeTransform = Matrix4.CreateFromQuaternion(interpolatedRotation) *
-                                              Matrix4.CreateTranslation(interpolatedPosition) *
-                                              Matrix4.CreateScale(interpolatedScale);
+                // OpenTK uses row vectors: scale first, then rotate, then translate
+                nodeTransform = Matrix4.CreateScale(interpolatedScale) *
+                                Matrix4.CreateFromQuaternion(interpolatedRotation) *
+                                Matrix4.CreateTranslation(interpolatedPosition);
             }
 
             Matrix4 toGlobalSpace = nodeTransform * parentTransform;
@@ -200,7 +241,7 @@ namespace Engine
             float time0 = (float)boneAnimation.ScalingKeys[index0].Time;
             float time1 = (float)boneAnimation.ScalingKeys[index1].Time;
             float deltaTime = time1 - time0;
-            float percentage = (timeAt - time0) / deltaTime;
+            float percentage = MathHelper.Clamp((timeAt - time0) / deltaTime, 0f, 1f);
 
             Vector3 start = Util.ConvertVector3Dto3(boneAnimation.ScalingKeys[index0].Value);
             Vector3 end = Util.ConvertVector3Dto3(boneAnimation.ScalingKeys[index1].Value);
@@ -218,6 +259,7 @@ namespace Engine
                 {
                     if (timeAt < boneAnimation.ScalingKeys[i + 1].Time) return i;
                 }
+                return boneAnimation.ScalingKeyCount - 2;
             }
             return 0;
         }
@@ -232,7 +274,7 @@ namespace Engine
             float time0 = (float)boneAnimation.RotationKeys[index0].Time;
             float time1 = (float)boneAnimation.RotationKeys[index1].Time;
             float deltaTime = time1 - time0;
-            float percentage = (timeAt - time0) / deltaTime;
+            float percentage = MathHelper.Clamp((timeAt - time0) / deltaTime, 0f, 1f);
 
             Quaternion start = Util.ConvertQuaternion(boneAnimation.RotationKeys[index0].Value);
             Quaternion end = Util.ConvertQuaternion(boneAnimation.RotationKeys[index1].Value);
@@ -246,6 +288,7 @@ namespace Engine
             {
                 for (int i = 0; i < boneAnimation.RotationKeyCount - 1; i++)
                     if (timeAt < boneAnimation.RotationKeys[i + 1].Time) return i;
+                return boneAnimation.RotationKeyCount - 2;
             }
             return 0;
         }
@@ -260,7 +303,7 @@ namespace Engine
             float time0 = (float)boneAnimation.PositionKeys[index0].Time;
             float time1 = (float)boneAnimation.PositionKeys[index1].Time;
             float deltaTime = time1 - time0;
-            float percentage = (timeAt - time0) / deltaTime;
+            float percentage = MathHelper.Clamp((timeAt - time0) / deltaTime, 0f, 1f);
 
             Vector3 start = Util.ConvertVector3Dto3(boneAnimation.PositionKeys[index0].Value);
             Vector3 end = Util.ConvertVector3Dto3(boneAnimation.PositionKeys[index1].Value);
@@ -275,6 +318,7 @@ namespace Engine
             {
                 for (int i = 0; i < boneAnimation.PositionKeyCount - 1; i++)
                     if (timeAt < boneAnimation.PositionKeys[i + 1].Time) return i;
+                return boneAnimation.PositionKeyCount - 2;
             }
             return 0;
         }

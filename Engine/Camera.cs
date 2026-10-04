@@ -6,7 +6,7 @@ namespace Engine
 {
     public class Camera
     {
-        public Player Player { get; private set; }
+        public Player Player { get; set; }
         public float AspectRatio { get; set; }
         public static float Fov { get; set; }
         public static float Near { get; set; }

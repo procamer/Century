@@ -18,6 +18,9 @@ namespace Engine
             fragmentHandle = LoadShader(fragmentFileName, ShaderType.FragmentShader);
             //BindAttributes();
             GL.LinkProgram(handle);
+            GL.GetProgram(handle, GetProgramParameterName.LinkStatus, out int linked);
+            if (linked == 0)
+                throw new Exception($"Shader link failed ({vertexFileName}, {fragmentFileName}): {GL.GetProgramInfoLog(handle)}");
             GL.ValidateProgram(handle);
             GL.DeleteShader(vertexHandle);
             GL.DeleteShader(fragmentHandle);
@@ -32,7 +35,10 @@ namespace Engine
             GL.CompileShader(shaderHandle);
 
             string infoLogShader = GL.GetShaderInfoLog(shaderHandle);
-            if (infoLogShader != string.Empty) throw new Exception(infoLogShader);
+            GL.GetShader(shaderHandle, ShaderParameter.CompileStatus, out int compiled);
+            if (compiled == 0) throw new Exception($"Shader compile failed ({fileName}): {infoLogShader}");
+            // Drivers may log warnings for shaders that compiled fine
+            if (!string.IsNullOrWhiteSpace(infoLogShader)) Console.WriteLine($"Shader ({fileName}): {infoLogShader}");
             GL.AttachShader(handle, shaderHandle);
 
             return shaderHandle;

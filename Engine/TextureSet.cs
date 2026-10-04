@@ -28,7 +28,7 @@ namespace Engine
         public Texture GetTexture(string path)
         {
             if (path == null) return null;
-            return dict[path];
+            return dict.TryGetValue(path, out Texture texture) ? texture : null;
         }
 
         public void Dispose()

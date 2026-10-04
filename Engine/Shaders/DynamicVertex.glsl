@@ -12,6 +12,7 @@ layout (location = 6) in vec4 Weight;
 #define MAX_WEIGHTS 4
 
 out vec2 passTextureCoords;
+out vec3 passNormal;
 
 uniform mat4 projectionMatrix;
 uniform mat4 viewMatrix;
@@ -23,10 +24,12 @@ uniform mat4 boneTransform[MAX_BONE];
 void main()
 {
 	mat4 boneTransformation = mat4(0.0f);
-	vec4 normalizedWeight = normalize(Weight);    
+	vec4 normalizedWeight = normalize(Weight);
 	for(int i =0; i<MAX_WEIGHTS;i++)
-		boneTransformation += boneTransform[uint(BoneID[i])] * normalizedWeight[i];	            
+		boneTransformation += boneTransform[uint(BoneID[i])] * normalizedWeight[i];
 	vec4 worldPosition = transformationMatrix * boneTransformation * vec4(Position, 1.0);
 	gl_Position = projectionMatrix * viewMatrix * worldPosition;
     passTextureCoords = TexCoord;
+    // Normals follow the skinned pose; the fragment shader renormalizes, so the weight scale doesn't matter
+    passNormal = mat3(transformationMatrix) * mat3(boneTransformation) * Normal;
 }

@@ -31,19 +31,9 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="AssimpNet">
-      <HintPath>..\..\..\..\LIB\C#\AssimpNet.4.1.0\lib\net40\AssimpNet.dll</HintPath>
-    </Reference>
-    <Reference Include="OpenTK, Version=3.2.0.0, Culture=neutral, PublicKeyToken=bad199fe84eb3df4, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\LIB\C#\OpenTK.3.1.0\lib\net20\OpenTK.dll</HintPath>
-    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
-    <Reference Include="TargaImage">
-      <HintPath>..\..\..\..\LIB\C#\TargaImage.dll</HintPath>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="StaticModel.cs" />
@@ -52,6 +42,7 @@
     <Compile Include="Loader.cs" />
     <Compile Include="Animator.cs" />
     <Compile Include="Camera.cs" />
+    <Compile Include="Collider.cs" />
     <Compile Include="Settings\Core.Designer.cs">
       <DependentUpon>Core.settings</DependentUpon>
       <AutoGen>True</AutoGen>
@@ -109,6 +100,11 @@
     <None Include="Shaders\TerrainVertex.glsl">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="AssimpNet" Version="4.1.0" />
+    <PackageReference Include="OpenTK" Version="3.1.0" />
+    <PackageReference Include="Pfim" Version="0.11.4" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

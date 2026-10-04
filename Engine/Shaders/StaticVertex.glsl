@@ -7,6 +7,7 @@ layout (location = 3) in vec3 Tangent;
 layout (location = 4) in vec3 Bitangent;
 
 out vec2 passTextureCoords;
+out vec3 passNormal;
 
 uniform mat4 projectionMatrix;
 uniform mat4 viewMatrix;
@@ -16,4 +17,6 @@ void main()
 {
 	gl_Position = projectionMatrix * viewMatrix * transformationMatrix * vec4(Position, 1.0);
     passTextureCoords = TexCoord;
+    // Models are scaled uniformly, so the model matrix can rotate normals directly
+    passNormal = mat3(transformationMatrix) * Normal;
 }

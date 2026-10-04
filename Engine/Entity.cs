@@ -29,6 +29,8 @@ namespace Engine
         public Vector3 Position { get; set; } = Vector3.Zero;
         public Vector3 Rotation {  get; set; } = Vector3.Zero;
         public float Scale { get; set; } = 1;
+        // Radius of the soft shadow drawn on the ground under the object; 0 casts none
+        public float ShadowRadius { get; set; } = 0;
 
         public void Move( Vector3 position)
         {

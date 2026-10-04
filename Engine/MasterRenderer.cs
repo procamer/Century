@@ -2,6 +2,7 @@
 using OpenTK;
 using OpenTK.Graphics.OpenGL;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Engine
 {
@@ -9,6 +10,18 @@ namespace Engine
     {
         internal Skybox skybox;
         internal Terrain terrain;
+
+        // Points toward the sun in the skybox (back face, ~37 degrees above the horizon)
+        public Vector3 LightDirection { get; set; } = new Vector3(-0.41f, 0.55f, -0.73f).Normalized();
+        public Vector3 LightColor { get; set; } = new Vector3(0.78f, 0.74f, 0.66f);
+        // Hemisphere ambient: cool sky light from above, darker light bounced off the ground from below
+        public Vector3 AmbientSky { get; set; } = new Vector3(0.36f, 0.40f, 0.48f);
+        public Vector3 AmbientGround { get; set; } = new Vector3(0.20f, 0.18f, 0.16f);
+
+        // Blob shadows on the terrain; MaxShadowCasters must match MAX_SHADOW_CASTERS in TerrainFragment.glsl
+        const int MaxShadowCasters = 16;
+        public float ShadowDarkness { get; set; } = 0.55f;
+        public float ShadowFadeHeight { get; set; } = 20f;
 
         public MasterRenderer()
         {
@@ -35,12 +48,15 @@ namespace Engine
             terrain.shader.SetStart();
             terrain.shader.SetUniform("projectionMatrix", camera.ProjectionMatrix());
             terrain.shader.SetUniform("viewMatrix", camera.ViewMatrix());
+            ApplyLighting(terrain.shader);
+            ApplyShadowCasters(terrain.shader, staticModels, dynamicModels);
             terrain.Draw();
             terrain.shader.SetStop();
 
             foreach (var item in staticModels)
             {
                 item.shader.SetStart();
+                ApplyLighting(item.shader);
                 item.shader.SetUniform("projectionMatrix", camera.ProjectionMatrix());
                 item.shader.SetUniform("viewMatrix", camera.ViewMatrix());
                 item.shader.SetUniform("transformationMatrix", item.TransformationMatrix());
@@ -55,6 +71,7 @@ namespace Engine
             foreach (var item in dynamicModels)
             {
                 item.shader.SetStart();
+                ApplyLighting(item.shader);
                 item.shader.SetUniform("projectionMatrix", camera.ProjectionMatrix());
                 item.shader.SetUniform("viewMatrix", camera.ViewMatrix());
                 item.shader.SetUniform("transformationMatrix", item.TransformationMatrix());
@@ -72,6 +89,33 @@ namespace Engine
 
         }
 
+        private void ApplyLighting(Shader shader)
+        {
+            shader.SetUniform("lightDirection", LightDirection);
+            shader.SetUniform("lightColor", LightColor);
+            shader.SetUniform("ambientSky", AmbientSky);
+            shader.SetUniform("ambientGround", AmbientGround);
+        }
+
+        private void ApplyShadowCasters(Shader shader, List<StaticModel> staticModels, List<DynamicModel> dynamicModels)
+        {
+            int count = 0;
+            foreach (Entity entity in staticModels.Concat<Entity>(dynamicModels))
+            {
+                if (entity.ShadowRadius <= 0 || count == MaxShadowCasters) continue;
+
+                // Higher up (e.g. mid-jump) the shadow gets smaller and fainter, which shows the height
+                float lift = MathHelper.Clamp(entity.Position.Y / ShadowFadeHeight, 0f, 1f);
+                float radius = entity.ShadowRadius * (1f - 0.4f * lift);
+                float darkness = ShadowDarkness * (1f - 0.7f * lift);
+
+                shader.SetUniform("shadowCasters[" + count + "]",
+                    new Vector4(entity.Position.X, entity.Position.Z, radius, darkness));
+                count++;
+            }
+            shader.SetUniform("shadowCasterCount", count);
+        }
+
         private void ApplyMaterial(Shader shader, Material material, TextureSet textureSet)
         {            
             // colorDiffuse
@@ -81,12 +125,16 @@ namespace Engine
             shader.SetUniform("colorDiffuse", colorDiffuse);
 
             // textureDiffuse (Texture0)
+            Texture diffuse = null;
             if (material.HasTextureDiffuse)
             {
                 material.GetMaterialTexture(TextureType.Diffuse, 0, out TextureSlot tex);
-                Texture texture = textureSet.GetTexture(tex.FilePath);
+                diffuse = textureSet.GetTexture(tex.FilePath);
+            }
+            if (diffuse != null)
+            {
                 GL.ActiveTexture(TextureUnit.Texture0);
-                GL.BindTexture(TextureTarget.Texture2D, texture.TextureID);
+                GL.BindTexture(TextureTarget.Texture2D, diffuse.TextureID);
                 shader.SetUniform("textureDiffuse", 0);
                 shader.SetUniform("hasTextureDiffuse", 1); // true
             }
@@ -102,6 +150,7 @@ namespace Engine
             shader.SetUniform("colorSpecular", colorSpecular);
 
             // textureSpecular (Texture1)
+            bool specularBound = false;
             if (material.HasTextureSpecular)
             {
                 material.GetMaterialTexture(TextureType.Specular, 0, out TextureSlot tex);
@@ -111,15 +160,13 @@ namespace Engine
                     GL.ActiveTexture(TextureUnit.Texture1);
                     GL.BindTexture(TextureTarget.Texture2D, texture.TextureID);
                     shader.SetUniform("textureSpecular", 1);
-                    shader.SetUniform("hasTextureSpecular", 1);
+                    specularBound = true;
                 }
             }
-            else
-            {
-                shader.SetUniform("hasTextureSpecular", 0);
-            }
+            shader.SetUniform("hasTextureSpecular", specularBound ? 1 : 0);
 
             // textureHeight (Texture2)
+            bool normalBound = false;
             if (material.HasTextureHeight)
             {
                 material.GetMaterialTexture(TextureType.Height, 0, out TextureSlot tex);
@@ -129,13 +176,10 @@ namespace Engine
                     GL.ActiveTexture(TextureUnit.Texture2);
                     GL.BindTexture(TextureTarget.Texture2D, texture.TextureID);
                     shader.SetUniform("textureNormal", 2);
-                    shader.SetUniform("hasTextureNormal", 1);
+                    normalBound = true;
                 }
             }
-            else
-            {
-                shader.SetUniform("hasTextureNormal", 0);
-            }
+            shader.SetUniform("hasTextureNormal", normalBound ? 1 : 0);
 
             // Clear textures
             GL.Disable(EnableCap.Texture2D);

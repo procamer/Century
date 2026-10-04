@@ -17,9 +17,11 @@ namespace Game
         FPSTracker fpsTracker = new FPSTracker();
         Camera camera;
         MasterRenderer renderer;
-        Player player;
+        List<Player> players = new List<Player>();
+        int activePlayer = 0;
         List<DynamicModel> dynamicModels = new List<DynamicModel>();
         List<StaticModel> staticModels = new List<StaticModel>();
+        List<Collider> colliders = new List<Collider>();
 
         public Window(int width = 800, int height = 600, string title = "Game Engine")
             : base(width, height, GraphicsMode.Default, title, GameWindowFlags.Default, DisplayDevice.Default, 0, 0, GraphicsContextFlags.ForwardCompatible)
@@ -34,15 +36,23 @@ namespace Game
             // tree - (origin)
             StaticModel tree = new StaticModel(Util.ModelsPath + "Tree\\tree.obj")
             {
-                Scale = 10f
+                Scale = 10f,
+                ShadowRadius = 30f // the canopy's footprint
             };
             staticModels.Add(tree);
+            // trunk measured from tree.obj in model space (base center -0.07,0.37 / radius 0.84 / height 6.2);
+            // the leaves start above the characters' reach, so only the trunk collides
+            colliders.Add(new CylinderCollider(
+                tree.Position + new Vector3(-0.07f, 0f, 0.37f) * tree.Scale,
+                0.84f * tree.Scale,
+                6.2f * tree.Scale));
 
             // lara model
             DynamicModel lara = new DynamicModel(Util.ModelsPath + "Lara\\T-Pose.fbx")
             {
                 Position = new Vector3(-50f, 0f, -10f),
                 Scale = 0.05f,
+                ShadowRadius = 9f
             };
             // lara animations
             Scene anim = Loader.LoadRaw(Util.ModelsPath + "Lara\\idle.fbx");
@@ -52,6 +62,8 @@ namespace Game
             lara.animator.AddAnimation("walk", anim.Animations[0]);
 
             anim = Loader.LoadRaw(Util.ModelsPath + "Lara\\Jump.fbx");
+            // the clip lifts the hips itself; strip that so the Player's jump physics does the lifting
+            Animator.MakeInPlace(anim.Animations[0], "mixamorig:Hips_$AssimpFbx$_Translation");
             lara.animator.AddAnimation("jump", anim.Animations[0]);
 
             anim = Loader.LoadRaw(Util.ModelsPath + "Lara\\Running.fbx");
@@ -67,12 +79,13 @@ namespace Game
             DynamicModel knight = new DynamicModel(Util.ModelsPath + "Solus the knight\\solus_the_knight.fbx")
             {
                 Position = new Vector3(50f, 0f, -10f),
-                Scale = 0.2f
+                Scale = 0.2f,
+                ShadowRadius = 8f
             };
             //knight animations
             knight.animator.AddAnimation("idle", knight.Raw.Animations[14]);
             knight.animator.AddAnimation("walk", knight.Raw.Animations[40]);
-            knight.animator.AddAnimation("jump", knight.Raw.Animations[22]);
+            knight.animator.AddAnimation("jump", knight.Raw.Animations[20]); // anim_jump_in_place
             anim = Loader.LoadRaw(Util.ModelsPath + "Solus the knight\\Jogging.fbx");
             knight.animator.AddAnimation("run", anim.Animations[0]);
             anim = Loader.LoadRaw(Util.ModelsPath + "Solus the knight\\Salute.fbx");
@@ -81,8 +94,19 @@ namespace Game
             knight.animator.ActiveAnimation = 0;
             dynamicModels.Add(knight);
 
-            player = new Player(lara);
-            camera = new Camera(player);
+            // jump timings measured from each character's jump clip
+            players.Add(new Player(lara, new JumpSettings { TakeoffTime = 0.75f, AirTime = 0.55f, Height = 7f })
+            {
+                CollisionRadius = 5f,
+                CollisionHeight = 46f
+            });
+            players.Add(new Player(knight, new JumpSettings { TakeoffTime = 0.4f, AirTime = 0.5f, Height = 5f })
+            {
+                CollisionRadius = 4.5f,
+                CollisionHeight = 36f
+            });
+            foreach (Player p in players) colliders.Add(p.Body); // characters block each other
+            camera = new Camera(players[activePlayer]);
             renderer = new MasterRenderer();
 
             WindowState = WindowState.Fullscreen;
@@ -95,7 +119,8 @@ namespace Game
             base.OnUpdateFrame(e);
             fpsTracker.Update();
             foreach (var model in dynamicModels) model.animator.Update(fpsTracker.LastFrameDelta);
-            player.Update(fpsTracker.LastFrameDelta);
+            for (int i = 0; i < players.Count; i++)
+                players[i].Update(fpsTracker.LastFrameDelta, i == activePlayer, colliders);
             camera.Update();
         }
 
@@ -119,17 +144,9 @@ namespace Game
 
             if (e.Key == Key.Escape) { Exit(); }
 
-            if (e.Key == Key.Number1)
-            {
-                player = new Player(dynamicModels[0]);
-                camera = new Camera(player);
-            }
-
-            if (e.Key == Key.Number2)
-            {
-                player = new Player(dynamicModels[1]);
-                camera = new Camera(player);
-            }
+            if (e.Key == Key.Number1) activePlayer = 0;
+            if (e.Key == Key.Number2) activePlayer = 1;
+            camera.Player = players[activePlayer];
 
         }
 
